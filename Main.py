@@ -92,8 +92,7 @@ def getStatesInfo():
     logger.info(f"Found {states} states in state_regions")
     stateInfo = [0] * states
     for s in range(states):
-        stateInfo[s] = {'naval_exit_id': 0}
-    #stateInfo = [{'naval_exit_id': 0}] * states
+        stateInfo[s] = {'naval_exit_id': 0, 'resourcesStatic': 0}
     return states, stateInfo
 
 def getResources(stateCount, stateInfo):
@@ -135,8 +134,8 @@ def getResources(stateCount, stateInfo):
                     name = findResource.groups()[0]
                     b = findResource.groups()[1]
                     objectToAdd = {'buildingGroup': b, 
-                                   'statesDiscovered': [0] * stateCount,
-                                   'statesUndiscovered': [0] * stateCount,
+                                   'discoveredInState': [0] * stateCount,
+                                   'undiscoveredInState': [0] * stateCount,
                                    'totalDiscovered' : 0,
                                    'totalUndiscovered' : 0
                                    }
@@ -147,7 +146,7 @@ def getResources(stateCount, stateInfo):
 
     return resourcesStatic, resourcesDynamic
 
-def getInfoFromStateRegions(resourcesStatic, pathGameStateRegions):
+def getInfoFromStateRegions(resourcesStatic):
     logger.info(f"Reading files from {pathGameStateRegions}")
     resourcesFoundStatic = 0
     resourcesFoundDiscovered = 0
@@ -186,30 +185,29 @@ def getInfoFromStateRegions(resourcesStatic, pathGameStateRegions):
                                 value = int(findResource.groups()[0])
                                 resource['states'][stateCurrent] = value
                                 resource['total'] += value
+                                stateInfo[stateCurrent]['resourcesStatic'] += value
                                 resourcesFoundStatic += value
                     elif state == StateResourceExpected.DYNAMIC:
                         for key, resource in resourcesDynamic.items():
                             findResource = re.search(r'type\s*=\s*"' + resource['buildingGroup'], line)
                             if findResource:
-                                lineID += 1
-                                line = lines[lineID]
-                                
-                                if re.search(r'depleted_type', line):
+                                while(not re.search('    }', line)):
                                     lineID += 1
                                     line = lines[lineID]
-                                
-                                findResource = re.search(r'        discovered_amount = (\d+)', line)
-                                if findResource:
-                                    resource['statesDiscovered'][stateCurrent] = value
-                                    resource['totalDiscovered'] += value
-                                    resourcesFoundDiscovered += value
-                                    break
-                                findResource = re.search(r'        undiscovered_amount = (\d+)', line)
-                                if findResource:
-                                    resource['statesUndiscovered'][stateCurrent] = value
-                                    resource['totalUndiscovered'] += value
-                                    resourcesFoundUndiscovered += value
-                                    break
+                                    findResource = re.search(r'        discovered_amount = (\d+)', line)
+                                    if findResource:
+                                        value = int(findResource.groups()[0])
+                                        resource['discoveredInState'][stateCurrent] = value
+                                        resource['totalDiscovered'] += value
+                                        resourcesFoundDiscovered += value
+                                        lineID += 1
+                                        line = lines[lineID]
+                                    findResource = re.search(r'        undiscovered_amount = (\d+)', line)
+                                    if findResource:
+                                        value = int(findResource.groups()[0])
+                                        resource['undiscoveredInState'][stateCurrent] = value
+                                        resource['totalUndiscovered'] += value
+                                        resourcesFoundUndiscovered += value
                         
     if resourcesFoundStatic == 0:
         logger.error("No static resources found in state_regions")
@@ -247,18 +245,74 @@ def trimStateRegions():
             logger.info(f"Reading state_region {filename}")
             with open(filePath, "r") as f, open(tempFileLocation, "w") as g:
                 lines = f.readlines()
+                willNotWritePersistent = False
                 for line in lines:
-                    willWrite = True
+                    if not willNotWritePersistent:
+                        willWrite = True
+                    if re.search(r'capped_resources', line):
+                        willWrite = False
+                        willNotWritePersistent = True
+                    if re.search(r'^}$', line):
+                        willWrite = True
+                        willNotWritePersistent = False
                     if willWrite:
                         g.write(line)
             shutil.copy2(tempFileLocation, filePath)
     os.remove(tempFileLocation)
 
+def shuffle():
+    pass
+
+def restoreStateRegions():
+    tempFileLocation = "temp.txt"
+    stateCurrent = -1
+    for filename in os.listdir(pathGameStateRegions):
+        if filename[0:2] == "99":
+            continue
+        filePath = os.path.join(pathGameStateRegions, filename)
+        if os.path.isfile(filePath):
+            logger.info(f"Reading state_region {filename}")
+            with open(filePath, "r") as f, open(tempFileLocation, "w") as g:
+                lines = f.readlines()
+                for line in lines:
+                    if re.search("(STATE_.*) =.*", line):
+                        stateCurrent += 1
+                    if re.search("^}$", line): # if found end of state info, restore
+                        if stateInfo[stateCurrent]['resourcesStatic'] > 0:
+                            g.write('    capped_resources = {\n')
+                            for key, resource in resourcesStatic.items():
+                                currentRes = resource['states'][stateCurrent]
+                                if currentRes > 0:
+                                    g.write('        ' + resource['buildingGroup'] + ' = ' + str(currentRes) + "\n")
+                            g.write('    }\n')
+                        for key, resource in resourcesDynamic.items():
+                            resDisc = resource['discoveredInState'][stateCurrent]
+                            resUndisc = resource['undiscoveredInState'][stateCurrent]
+                            if resDisc + resUndisc > 0:
+                                if resDisc * resUndisc > 0:
+                                    pass #print('hi')
+                                g.write('    resource = {\n')
+                                g.write('        type = "' + resource['buildingGroup'] + '"\n')
+                                if key == 'gold':
+                                    g.write('        depleted_type = "bg_gold_mining"\n')
+                                if resDisc > 0:
+                                    g.write('        discovered_amount = ' + str(resDisc) + '\n')
+                                if resUndisc > 0:
+                                    g.write('        undiscovered_amount = ' + str(resUndisc) + '\n')
+                                g.write('    }\n')
+                        navalID = stateInfo[stateCurrent]['naval_exit_id']
+                        if navalID > 0:
+                            g.write('    naval_exit_id = ' + str(navalID) + '\n')
+                    g.write(line)
+            shutil.copy2(tempFileLocation, filePath)
+    os.remove(tempFileLocation)
 
 if __name__ == "__main__":
     logger = setupLogging()
     pathAppdataStateRegions, pathGameStateRegions = configureAppData()
     countStates, stateInfo = getStatesInfo()
     resourcesStatic, resourcesDynamic = getResources(countStates, stateInfo)
-    resourcesStatic, resourcesDynamic, stateInfo = getInfoFromStateRegions(resourcesStatic, pathGameStateRegions)
+    resourcesStatic, resourcesDynamic, stateInfo = getInfoFromStateRegions(resourcesStatic)
     trimStateRegions()
+    shuffle()
+    restoreStateRegions()
