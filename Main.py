@@ -28,7 +28,7 @@ def setupLogging():
 
     logger = logging.getLogger("V3RS")
     logging.basicConfig(level="INFO")
-
+    logger.info("Logger ready")
     return logger
 
 def configureAppData():
@@ -95,7 +95,7 @@ def getStatesInfo():
         stateInfo[s] = {'naval_exit_id': 0, 'resourcesStatic': 0}
     return states, stateInfo
 
-def getResources(stateCount, stateInfo):
+def loadResourcesFromConfig(stateCount, stateInfo):
     resourcesStatic = {}
     resourcesDynamic = {}
     countResStatic = 0
@@ -146,20 +146,21 @@ def getResources(stateCount, stateInfo):
 
     return resourcesStatic, resourcesDynamic
 
-def getInfoFromStateRegions(resourcesStatic):
+def getInfoFromStateRegions():
     logger.info(f"Reading files from {pathGameStateRegions}")
     resourcesFoundStatic = 0
     resourcesFoundDiscovered = 0
     resourcesFoundUndiscovered = 0
+    lineCount = 0
     stateCurrent = -1
     for filename in os.listdir(pathGameStateRegions):
         if filename[0:2] == "99":
             continue
         filePath = os.path.join(pathGameStateRegions, filename)
         if os.path.isfile(filePath):
-            logger.info(f"Reading state_region {filename}")
             with open(filePath, "r") as f:
                 lines = f.readlines()
+                lineCount += len(lines)
                 state = StateResourceExpected.NONE
                 for lineID in range(len(lines)):
                     line = lines[lineID]
@@ -233,23 +234,24 @@ def getInfoFromStateRegions(resourcesStatic):
             for key, resource in resourcesDynamic.items():
                 logger.info(f"Undiscovered: {resource['totalUndiscovered']} {key} in state_regions")
     
+    logger.info(f"Total lines in original state_regions: {lineCount}")
     return resourcesStatic, resourcesDynamic, stateInfo
                     
 def trimStateRegions():
     tempFileLocation = "temp.txt"
+    lineCount = 0
     for filename in os.listdir(pathGameStateRegions):
         if filename[0:2] == "99":
             continue
         filePath = os.path.join(pathGameStateRegions, filename)
         if os.path.isfile(filePath):
-            logger.info(f"Reading state_region {filename}")
             with open(filePath, "r") as f, open(tempFileLocation, "w") as g:
                 lines = f.readlines()
                 willNotWritePersistent = False
                 for line in lines:
                     if not willNotWritePersistent:
                         willWrite = True
-                    if re.search(r'capped_resources', line):
+                    if re.search(r'capped_resources', line) or re.search('resource = {', line):
                         willWrite = False
                         willNotWritePersistent = True
                     if re.search(r'^}$', line):
@@ -257,21 +259,25 @@ def trimStateRegions():
                         willNotWritePersistent = False
                     if willWrite:
                         g.write(line)
+            with open(tempFileLocation, "r") as g:
+                lines = g.readlines()
+                lineCount += len(lines)
             shutil.copy2(tempFileLocation, filePath)
     os.remove(tempFileLocation)
+    logger.info(f"Total lines in trimmed state_regions: {lineCount}")
 
 def shuffle():
     pass
 
 def restoreStateRegions():
     tempFileLocation = "temp.txt"
+    lineCount = 0
     stateCurrent = -1
     for filename in os.listdir(pathGameStateRegions):
         if filename[0:2] == "99":
             continue
         filePath = os.path.join(pathGameStateRegions, filename)
         if os.path.isfile(filePath):
-            logger.info(f"Reading state_region {filename}")
             with open(filePath, "r") as f, open(tempFileLocation, "w") as g:
                 lines = f.readlines()
                 for line in lines:
@@ -304,15 +310,19 @@ def restoreStateRegions():
                         if navalID > 0:
                             g.write('    naval_exit_id = ' + str(navalID) + '\n')
                     g.write(line)
+            with open(tempFileLocation, "r") as g:
+                lines = g.readlines()
+                lineCount += len(lines)
             shutil.copy2(tempFileLocation, filePath)
     os.remove(tempFileLocation)
+    logger.info(f"Total lines in restored state_regions: {lineCount}")
 
 if __name__ == "__main__":
     logger = setupLogging()
     pathAppdataStateRegions, pathGameStateRegions = configureAppData()
     countStates, stateInfo = getStatesInfo()
-    resourcesStatic, resourcesDynamic = getResources(countStates, stateInfo)
-    resourcesStatic, resourcesDynamic, stateInfo = getInfoFromStateRegions(resourcesStatic)
+    resourcesStatic, resourcesDynamic = loadResourcesFromConfig(countStates, stateInfo)
+    resourcesStatic, resourcesDynamic, stateInfo = getInfoFromStateRegions()
     trimStateRegions()
     shuffle()
     restoreStateRegions()
