@@ -7,13 +7,25 @@ import yaml
 import re
 from random import shuffle
 from enum import Enum
-import customtkinter
+import customtkinter as ctk
 from PIL import Image
 
 class StateResourceExpected (Enum):
     NONE = 0
     STATIC = 1
     DYNAMIC = 2
+
+class CustomWindow(ctk.CTkInputDialog):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("Custom Window")
+        
+        # Add widgets to the window
+        label = ctk.CTkLabel(self, text="This is a custom window!")
+        label.pack(padx=10, pady=10)
+
+        button = ctk.CTkButton(self, text="Close", command=self.destroy)
+        button.pack(pady=5)
 
 resourcesToIgnore = ['monument', 'fish', 'whale']
 global resourcesListGUI
@@ -29,7 +41,7 @@ def copyTree(src, dst, symlinks=False, ignore=None):
             shutil.copy2(s, d)
 
 def setupLogging():
-    configFile = pathAppdataStateRegions = os.path.join("loggingConfigs", "config.yaml")
+    configFile = os.path.join("loggingConfigs", "config.yaml")
     with open(configFile) as fIn:
         config = yaml.safe_load(fIn)
     logging.config.dictConfig(config)
@@ -41,18 +53,18 @@ def setupLogging():
 
 def configureAppData():
     pathAppdata = os.path.join(os.getenv('APPDATA'), "Victoria 3 Resource Shuffler")
-    pathAppdataStateRegions = os.path.join(pathAppdata, "state_regions")
-    pathAppdataStateRegionsOriginal = os.path.join(pathAppdataStateRegions, "original")
+    pathAppdataVersions = os.path.join(pathAppdata, "versions")
+    pathAppdataStateRegionsOriginal = os.path.join(pathAppdataVersions, "original", "state_regions")
 
     pathAppdataConfig = os.path.join(pathAppdata, "config.txt")
-    if not os.path.exists(pathAppdataStateRegions):
-        os.makedirs(pathAppdataStateRegions)
+    if not os.path.exists(pathAppdataVersions):
+        os.makedirs(pathAppdataVersions)
 
     if not os.path.exists(pathAppdataConfig):
         with open(pathAppdataConfig, "a+") as f:
             f.write("path=")
         logger.info("Config does not exist in %appdata%. It has been created now. Please input the path to the game")
-    return pathAppdataStateRegions, pathAppdataConfig, pathAppdataStateRegionsOriginal
+    return pathAppdataVersions, pathAppdataConfig, pathAppdataStateRegionsOriginal
 
 def makeBackUp(pathGameStateRegions):
     if not os.path.exists(pathAppdataStateRegionsOriginal):
@@ -127,13 +139,14 @@ def getResourcesFromConfig(stateCount):
         for line in f:
             isDynamic = re.search(r"dynamic", line)
             noInitialBuildings = re.search(r'noInitialBuildings', line)
-            findResource = re.search(r"([_\w]+)\s+([_\w]+)\s+([_\w]+)", line)
+            findResource = re.search(r"([a-z0-9]+)\s+([_\w]+)\s+([_\w]+)\s+([_\w]+)", line)
             if findResource == None:
                 logger.error(f"Error parsing line {line} in {fileName}")
             else:
                 name = findResource.groups()[0]
-                bg = findResource.groups()[1]
-                b = findResource.groups()[2]
+                color = findResource.groups()[1] 
+                bg = findResource.groups()[2]
+                b = findResource.groups()[3]
                 objectToAdd = {
                     'buildingGroup': bg, 
                     'building': b, 
@@ -150,7 +163,8 @@ def getResourcesFromConfig(stateCount):
                     'total' : 0,
                     'totalDiscovered' : 0,
                     'totalUndiscovered' : 0,
-                    'stringVar': None
+                    'stringVar': None,
+                    'strColor': color
                     }
                 resources[name] = objectToAdd
                 if isDynamic:
@@ -548,9 +562,13 @@ def execute():
     shuffleResources(resources)
     restoreStateRegions()
 
+    custom_window = CustomWindow(app)
+    custom_window.grab_set()  # Ensure focus stays on the custom window
+    app.wait_window(custom_window)
+
 def updateBasedOnEntryPath(pathToGame):
     global isPathValid, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, countStates, stateInfo, stateNameToID, stateIDToName, resources
-    global imageRaw, btn
+    global imagePathIsCorrect, btnPathIsCorrect
     global resourcesListGUI
     isPathValid, gamePath, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons = configureGamePath(pathToGame)
     
@@ -561,58 +579,62 @@ def updateBasedOnEntryPath(pathToGame):
         with open(pathAppdataConfig, "w") as f:
             f.write("path=" + gamePath)
 
-        imageRaw = Image.open('resources/OK.png')
-        btn.configure(image=customtkinter.CTkImage(imageRaw))
+        imagePathIsCorrect = Image.open('resources/OK.png')
+        btnPathIsCorrect.configure(image=ctk.CTkImage(imagePathIsCorrect))
 
         countStates, stateInfo, stateNameToID, stateIDToName = getStatesInfo()
         resources = getResourcesFromConfig(countStates)
 
-        labelPresets = customtkinter.CTkLabel(master=app, text="Presets", justify=customtkinter.RIGHT)
+        labelPresets = ctk.CTkLabel(master=app, text="Presets", justify=ctk.RIGHT)
         labelPresets.grid(row = 1, column = 0)
 
-        comboBoxPresets = customtkinter.CTkComboBox(app, values=["Vanilla - No shuffle", "Gold", "Yellow & Black Gold", "Discoverables", "Mineable & Oil", "All but wood", "All"],
+        comboBoxPresets = ctk.CTkComboBox(app, values=["Vanilla - No shuffle", "Gold", "Yellow & Black Gold", "Discoverables", "Mineable & Oil", "All but wood", "All"],
                                                     command=switch_resource_preset_callback)
         comboBoxPresets.grid(row = 1, column = 1)
 
-        labelHeaderResource = customtkinter.CTkLabel(master=app, text="Resource", justify=customtkinter.RIGHT)
+        labelHeaderResource = ctk.CTkLabel(master=app, text="Resource", justify=ctk.RIGHT)
         labelHeaderResource.grid(row = 2, column = 0)
         
-        labelHeaderShuffle = customtkinter.CTkLabel(master=app, text="Shuffle?", justify=customtkinter.RIGHT)
+        labelHeaderShuffle = ctk.CTkLabel(master=app, text="Shuffle?", justify=ctk.RIGHT)
         labelHeaderShuffle.grid(row = 2, column = 1)
 
-        btnExecute = customtkinter.CTkButton(app, text = "Execute", corner_radius=32, command=execute)
+        btnExecute = ctk.CTkButton(app, text = "Execute", corner_radius=32, command=execute)
         btnExecute.grid(row=1, column=6)
 
         resourcesListGUI.extend([labelPresets, comboBoxPresets, labelHeaderResource, labelHeaderShuffle, btnExecute])
         for resKey, resource in resources.items():
             if resKey in resourcesToIgnore:
                 continue
-            resource['stringVar'] = customtkinter.StringVar(value="0")
+            resource['stringVar'] = ctk.StringVar(value="0")
             #imageRaw = Image.open(os.path.join(pathGameGoodIcons, resKey + ".dds"))
             #imageRaw = imageRaw.resize((15, 15))
-            label = customtkinter.CTkLabel(master=app, text=resKey.capitalize(), justify=customtkinter.RIGHT)
-                                           #,image=customtkinter.CTkImage(imageRaw))
+            label = ctk.CTkLabel(master=app, text=resKey.capitalize(), justify=ctk.RIGHT)
+                                           #,image=ctk.CTkImage(imageRaw))
             label.grid(row = 3 + len(resourcesListGUI), column = 0)
 
-            checkBox = customtkinter.CTkSwitch(master=app, text="", variable=resource['stringVar'], onvalue="1", offvalue="0",
+            checkBox = ctk.CTkSwitch(master=app, text="", variable=resource['stringVar'], onvalue="1", offvalue="0",
                                                command=functools.partial(switch_resource_callback(resKey, resource, comboBoxPresets)))
+            if resource['strColor']:
+                checkBox.configure(progress_color="#" + resource['strColor'])
+            else:
+                checkBox.configure(progress_color="#aaffaa")
             checkBox.grid(row = 3 + len(resourcesListGUI), column = 1)
             resourcesListGUI.extend([label, checkBox])
     else:
-        imageRaw = Image.open('resources/wrong.png')
-        btn.configure(image=customtkinter.CTkImage(imageRaw))
+        imagePathIsCorrect = Image.open('resources/wrong.png')
+        btnPathIsCorrect.configure(image=ctk.CTkImage(imagePathIsCorrect))
 def on_entry_changed(event):
-    updateBasedOnEntryPath(entry1.get())
+    updateBasedOnEntryPath(entryPath.get())
 
 if __name__ == "__main__":
     logger = setupLogging()
-    pathAppdataStateRegions, pathAppdataConfig, pathAppdataStateRegionsOriginal = configureAppData()
+    pathAppdataVersions, pathAppdataConfig, pathAppdataStateRegionsOriginal = configureAppData()
 
-    app = customtkinter.CTk()
+    app = ctk.CTk()
     app.title("Victoria 3 Resource Shuffler")
     app.geometry("1000x400")
-    customtkinter.set_appearance_mode("System")
-    customtkinter.set_appearance_mode("dark")
+    ctk.set_appearance_mode("System")
+    ctk.set_appearance_mode("dark")
     width = 5
     for i in range(width+1):
         app.grid_columnconfigure(i, weight=1, uniform=5)
@@ -625,17 +647,16 @@ if __name__ == "__main__":
                 pathGame = pathGame.groups()[0]
                 break
 
-    label = customtkinter.CTkLabel(master=app, text="Victoria 3 / Mod folder: ")
-    label.grid(row=0, column=0, columnspan=2, padx=(10, 5), pady=10)#, sticky=customtkinter.W)
+    labelPath = ctk.CTkLabel(master=app, text="Victoria 3 / Mod folder: ")
+    labelPath.grid(row=0, column=0, columnspan=2, padx=(10, 5), pady=10)#, sticky=ctk.W)
 
-    entry1 = customtkinter.CTkEntry(master=app, width=500)
-    entry1.insert(0, pathGame)
-    entry1.grid(row=0, column=2, columnspan=4, padx=(0, 10), pady=10)#, sticky=customtkinter.W)
-    entry1.bind("<KeyRelease>", on_entry_changed)
-    imageRaw = Image.open('resources/wrong.png')
-    #image = customtkinter.CTkImage(imageRaw)
-    btn = customtkinter.CTkButton(app, text = "", corner_radius=32, fg_color="transparent", image=customtkinter.CTkImage(imageRaw))
-    btn.grid(row=0, column=6)
+    entryPath = ctk.CTkEntry(master=app, width=500)
+    entryPath.insert(0, pathGame)
+    entryPath.grid(row=0, column=2, columnspan=4, padx=(0, 10), pady=10)#, sticky=ctk.W)
+    entryPath.bind("<KeyRelease>", on_entry_changed)
+    imagePathIsCorrect = Image.open('resources/wrong.png')
+    btnPathIsCorrect = ctk.CTkButton(app, text = "", corner_radius=32, fg_color="transparent", image=ctk.CTkImage(imagePathIsCorrect))
+    btnPathIsCorrect.grid(row=0, column=6)
     
     updateBasedOnEntryPath(pathGame)
 
