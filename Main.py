@@ -94,7 +94,7 @@ def configureGamePath(path):
     return validPath, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons
 
 def getStatesInfo():
-    states = 0
+    stateCount = 0
     stateNameToID = {}
     stateIDToName = {}
     for filename in os.listdir(pathGameStateRegions):
@@ -106,15 +106,15 @@ def getStatesInfo():
                 for line in f:
                     findState = re.search("(STATE_.*) =.*", line)
                     if findState:
-                        states += 1
+                        stateCount += 1
                         stateName = findState.groups()[0]
-                        stateNameToID[stateName] = states - 1
-                        stateIDToName[states - 1] = stateName
-    logger.info(f"Found {states} states in state_regions")
-    stateInfo = [0] * states
-    for s in range(states):
+                        stateNameToID[stateName] = stateCount - 1
+                        stateIDToName[stateCount - 1] = stateName
+    logger.info(f"Found {stateCount} states in state_regions")
+    stateInfo = [0] * stateCount
+    for s in range(stateCount):
         stateInfo[s] = {'naval_exit_id': 0, 'resourcesStaticTotal': 0}
-    return states, stateInfo, stateNameToID, stateIDToName
+    return stateCount, stateInfo, stateNameToID, stateIDToName
 
 def getResourcesFromConfig(stateCount):
     resources = {}
@@ -407,9 +407,9 @@ def shuffleResources(resources):
         shuffle(resource['available'])
         if resource['isDynamic']:
             for resKey, resource in resources.items():
-                if resource['discoveredInStateTotal'] > 0:
+                if resource['totalDiscovered'] > 0:
                     shuffle(resource['discoveredInState'])
-                if resource['undiscoveredInStateTotal'] > 0:
+                if resource['totalUndiscovered'] > 0:
                     shuffle(resource['undiscoveredInState'])
                         
     # restore guaranteed resources
@@ -496,23 +496,52 @@ def restoreStateRegions():
     os.remove(tempFileLocation)
     logger.info(f"Total lines in restored state_regions: {lineCount}")
 
-def switch_resource_callback(resKey, resource):
+def switch_resource_callback(resKey, resource, comboBoxPresets):
     def callback():
         value = resource['stringVar'].get()
         if value == "1":
             resources[resKey]['isShuffled'] = True
         else:
             resources[resKey]['isShuffled'] = False
-        print(f'{resKey}: {resources[resKey]['isShuffled']}')
+        comboBoxPresets.set('Custom')
+        logger.info(f'{resKey}: {resources[resKey]['isShuffled']}')
     return callback
+
+def switch_resource_preset_callback(value):
+    for resourceName, resource in resources.items():
+        if resourceName in resourcesToIgnore:
+            continue
+        resource['isShuffled'] = False
+        resource['stringVar'].set("0")
+
+        if  value == "All" or \
+            resourceName == 'gold' and value != "Vanilla - No shuffle" or \
+            resourceName == 'oil' and value not in ["Vanilla - No shuffle", "Gold"] or \
+            resourceName in ['coal', 'iron', 'lead', 'sulfur'] and value not in ["Vanilla - No shuffle", "Gold", "Yellow & Black Gold", "Discoverables"] or \
+            resourceName == 'rubber' and value in ["All but wood", "All", "Discoverables"]:
+
+            resource['isShuffled'] = True
+            resource['stringVar'].set("1")            
+
+def clearCollectedResources(stateCount):
+    for resourceName, resource in resources.items():
+        resource['available'] = [0] * stateCount
+        resource['discoveredInState'] = [0] * stateCount
+        resource['undiscoveredInState'] = [0] * stateCount
+        resource['constrainedHistory'] = [0] * stateCount
+        resource['constrainedCompany'] = [0] * stateCount
+        resource['constrainedHistoryTotal'] = 0
+        resource['constrainedCompanyTotal'] = 0
+        resource['total'] = 0
+        resource['totalDiscovered'] = 0
+        resource['totalUndiscovered'] = 0
 
 def execute():
     global resources
-    for key, resource in resources.items():
-        print (f'{key}: {resource['isShuffled']}')
     
     makeBackUp(pathGameStateRegions)
-    getStatesInfo()
+    stateCount, stateInfo, stateNameToID, stateIDToName = getStatesInfo()
+    clearCollectedResources(stateCount)
     resources, stateInfo = getInfoFromStateRegions()
     resources = getResourcesFromHistory()
     resources = getResourcesFromCompanies(stateNameToID, stateIDToName)
@@ -526,7 +555,6 @@ def updateBasedOnEntryPath(pathToGame):
     global resourcesListGUI
     isPathValid, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons = configureGamePath(pathToGame)
     
-
     for widget in resourcesListGUI:
         widget.destroy()
     resourcesListGUI = []
@@ -540,7 +568,8 @@ def updateBasedOnEntryPath(pathToGame):
         labelPresets = customtkinter.CTkLabel(master=app, text="Presets", justify=customtkinter.RIGHT)
         labelPresets.grid(row = 1, column = 0)
 
-        comboBoxPresets = customtkinter.CTkComboBox(app, values=["Vanilla", "Gold", "Yellow & Black Gold", "Mineable & Oil", "All but wood", "All"])
+        comboBoxPresets = customtkinter.CTkComboBox(app, values=["Vanilla - No shuffle", "Gold", "Yellow & Black Gold", "Discoverables", "Mineable & Oil", "All but wood", "All"],
+                                                    command=switch_resource_preset_callback)
         comboBoxPresets.grid(row = 1, column = 1)
 
         labelHeaderResource = customtkinter.CTkLabel(master=app, text="Resource", justify=customtkinter.RIGHT)
@@ -559,12 +588,12 @@ def updateBasedOnEntryPath(pathToGame):
             resource['stringVar'] = customtkinter.StringVar(value="0")
             #imageRaw = Image.open(os.path.join(pathGameGoodIcons, resKey + ".dds"))
             #imageRaw = imageRaw.resize((15, 15))
-            label = customtkinter.CTkLabel(master=app, text="                        " + resKey.capitalize(), justify=customtkinter.RIGHT)
+            label = customtkinter.CTkLabel(master=app, text=resKey.capitalize(), justify=customtkinter.RIGHT)
                                            #,image=customtkinter.CTkImage(imageRaw))
             label.grid(row = 3 + len(resourcesListGUI), column = 0)
 
             checkBox = customtkinter.CTkSwitch(master=app, text="", variable=resource['stringVar'], onvalue="1", offvalue="0",
-                                               command=functools.partial(switch_resource_callback(resKey, resource)))
+                                               command=functools.partial(switch_resource_callback(resKey, resource, comboBoxPresets)))
             checkBox.grid(row = 3 + len(resourcesListGUI), column = 1)
             resourcesListGUI.extend([label, checkBox])
     else:
@@ -578,6 +607,7 @@ if __name__ == "__main__":
     pathAppdataStateRegions, pathAppdataConfig, pathAppdataStateRegionsOriginal = configureAppData()
 
     app = customtkinter.CTk()
+    app.title("Victoria 3 Resource Shuffler")
     app.geometry("1000x400")
     customtkinter.set_appearance_mode("System")
     customtkinter.set_appearance_mode("dark")
