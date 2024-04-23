@@ -17,7 +17,7 @@ handlers:
     level: DEBUG
     formatter: detailed
     filename: logs/my_app.log
-    maxBytes: 30000
+    maxBytes: 100000
     backupCount: 3
 loggers:
   root:
