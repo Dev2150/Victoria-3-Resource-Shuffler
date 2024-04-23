@@ -51,8 +51,7 @@ def configureAppData():
     if not os.path.exists(pathAppdataConfig):
         with open(pathAppdataConfig, "a+") as f:
             f.write("path=")
-        logger.error("Config does not exist in %appdata%. It has been created now. Please input the path to the game")
-        sys.exit()
+        logger.info("Config does not exist in %appdata%. It has been created now. Please input the path to the game")
     return pathAppdataStateRegions, pathAppdataConfig, pathAppdataStateRegionsOriginal
 
 def makeBackUp(pathGameStateRegions):
@@ -86,12 +85,12 @@ def configureGamePath(path):
         #logger.error(f"Path does not correspond to Victoria 3 folder; Expected {pathGameCompanies}")
         validPath = False
     
-    if not validPath:
-        return validPath, None, None, None, None
+    if not validPath: 
+        return validPath, None, None, None, None, None
 
     makeBackUp(pathGameStateRegions)
     
-    return validPath, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons
+    return validPath, pathGame, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons
 
 def getStatesInfo():
     stateCount = 0
@@ -553,12 +552,15 @@ def updateBasedOnEntryPath(pathToGame):
     global isPathValid, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, countStates, stateInfo, stateNameToID, stateIDToName, resources
     global imageRaw, btn
     global resourcesListGUI
-    isPathValid, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons = configureGamePath(pathToGame)
+    isPathValid, gamePath, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons = configureGamePath(pathToGame)
     
     for widget in resourcesListGUI:
         widget.destroy()
     resourcesListGUI = []
     if isPathValid:
+        with open(pathAppdataConfig, "w") as f:
+            f.write("path=" + gamePath)
+
         imageRaw = Image.open('resources/OK.png')
         btn.configure(image=customtkinter.CTkImage(imageRaw))
 
