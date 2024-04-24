@@ -12,4 +12,8 @@ def setupLogging():
     logger = logging.getLogger("V3RS")
     logging.basicConfig(level="INFO")
     logger.info("Logger ready")
+
+    pil_logger = logging.getLogger('PIL')
+    pil_logger.setLevel(logging.INFO)
+
     return logger

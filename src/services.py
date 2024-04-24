@@ -2,34 +2,10 @@ import os
 from random import shuffle
 import re
 import shutil
+import sys
 from typing import List
-from globalProperties import logger, resourcesToIgnore
+from globalProperties import IGNORED_RESOURCES
 from Auxiliary import copyTree
-from DialogRename import RenameDialog
-from readFromGameFiles import getInfoFromStateRegions, getResourcesFromCompanies, getResourcesFromHistory
-from datetime import date, datetime
-
-def execute(app, versions, pathAppdataVersions, pathGameStateRegions, pathAppdataStateRegionsOriginal, pathGameHistoryBuildings, pathGameCompanies, logger):
-    def callback():
-        if app.top is None or not app.top.winfo_exists():
-
-            makeBackUp(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger)
-            stateCount, stateInfo, stateNameToID, stateIDToName = getStatesInfo(pathGameStateRegions, logger)
-            clearCollectedResources(stateCount, app.resources)
-            app.resources, stateInfo = getInfoFromStateRegions(pathGameStateRegions, stateInfo, app.resources, logger)
-            app.resources = getResourcesFromHistory(pathGameHistoryBuildings, app.resources, logger)
-            app.resources = getResourcesFromCompanies(stateNameToID, stateIDToName, app.resources, pathGameCompanies, logger)
-            trimStateRegions(pathGameStateRegions, logger)
-            shuffleResources(app.resources, logger, stateIDToName)
-            restoreStateRegions(pathGameStateRegions, stateInfo, app.resources, logger)
-            
-            now = datetime.now()
-            name = app.comboBoxPresets.get() + " " + f" {now.year}-{now.month:02d}-{now.day:02d}--{now.hour:02d}-{now.minute:02d}-{now.second:02d}"
-
-            app.top = RenameDialog(name, app, pathAppdataVersions, pathGameStateRegions)  # create window if its None or destroyed
-
-        app.top.focus()  # if window exists focus it
-    return callback
 
 def makeBackUp(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger):
     if not os.path.exists(pathAppdataStateRegionsOriginal):
@@ -97,7 +73,7 @@ def getResourcesFromConfig(stateCount, logger):
     fileName = "resources.ini"
     if not os.path.exists(fileName):
         logger.error("File resource.txt does not exist")
-        exit
+        sys.exit()
     with open(fileName, "r") as f:
         for line in f:
             isDynamic = re.search(r"dynamic", line)
@@ -127,7 +103,10 @@ def getResourcesFromConfig(stateCount, logger):
                     'totalDiscovered' : 0,
                     'totalUndiscovered' : 0,
                     'stringVar': None,
-                    'strColor': color
+                    'strColor': color,
+                    'bestStates': [],
+                    'biggestValues': [],
+                    'labelBestStates': None,
                     }
                 resources[name] = objectToAdd
                 if isDynamic:
@@ -169,10 +148,9 @@ def trimStateRegions(pathGameStateRegions, logger):
     logger.info(f"Total lines in trimmed state_regions: {lineCount}")
 
 def shuffleResources(resources, logger, stateIDToName):
-    
     # remove guaranteed resources
     for resKey, resource in resources.items():
-        if resKey in resourcesToIgnore:
+        if resKey in IGNORED_RESOURCES:
             continue
         if not resource['isShuffled']:
             continue
@@ -191,21 +169,19 @@ def shuffleResources(resources, logger, stateIDToName):
 
     # shuffle remaining resources
     for resKey, resource in resources.items():
-        if resKey in resourcesToIgnore:
+        if resKey in IGNORED_RESOURCES:
             continue
         if resource['isShuffled'] == False:
             continue
         shuffle(resource['available'])
-        if resource['isDynamic']:
-            for resKey, resource in resources.items():
-                if resource['totalDiscovered'] > 0:
-                    shuffle(resource['discoveredInState'])
-                if resource['totalUndiscovered'] > 0:
-                    shuffle(resource['undiscoveredInState'])
-                        
+        if resource['totalDiscovered'] > 0:
+            shuffle(resource['discoveredInState'])
+        if resource['totalUndiscovered'] > 0:
+            shuffle(resource['undiscoveredInState'])
+
     # restore guaranteed resources
     for resKey, resource in resources.items():
-        if resKey in resourcesToIgnore:
+        if resKey in IGNORED_RESOURCES:
             continue
         if not resource['isShuffled']:
             continue
@@ -218,10 +194,11 @@ def shuffleResources(resources, logger, stateIDToName):
                     resource['undiscoveredInState'][state] += protectedAvailability
                 else:
                     resource['available'][state] += protectedAvailability
-    
+
+
 	#check
     for resKey, resource in resources.items():
-        if resKey in resourcesToIgnore:
+        if resKey in IGNORED_RESOURCES:
             continue
         if not resource['isShuffled']:
             continue
@@ -265,8 +242,6 @@ def restoreStateRegions(pathGameStateRegions, stateInfo, resources, logger):
                             resDisc = resource['discoveredInState'][stateCurrent]
                             resUndisc = resource['undiscoveredInState'][stateCurrent]
                             if resDisc + resUndisc > 0:
-                                if resDisc * resUndisc > 0:
-                                    pass #print('hi')
                                 g.write('    resource = {\n')
                                 g.write('        type = "' + resource['buildingGroup'] + '"\n')
                                 if key == 'gold':
@@ -300,6 +275,8 @@ def clearCollectedResources(stateCount, resources):
         resource['total'] = 0
         resource['totalDiscovered'] = 0
         resource['totalUndiscovered'] = 0
+        resource['bestStates'] = []
+        resource['biggestValues'] = []
 
 def getVersions(pathAppdataVersions, logger) -> List:
     versions = []
@@ -312,3 +289,41 @@ def getVersions(pathAppdataVersions, logger) -> List:
             versions.append(name)
     logger.info(f"Loaded {len(versions)} versions")
     return versions
+
+def findStatesWithMostResources(resources, stateCount) -> List:
+    for key, resource in resources.items():
+        for state in range(stateCount):
+            currentSum = resource['available'][state] + resource['discoveredInState'][state] + resource['undiscoveredInState'][state]
+            resource['bestStates'].append(state)
+            resource['biggestValues'].append(currentSum)
+
+        pairs = list(zip(resource['bestStates'], resource['biggestValues']))
+        sorted_pairs = sorted(pairs, key=lambda x: x[1], reverse=True)
+        
+        resource['bestStates'], resource['biggestValues'] = zip(*sorted_pairs)
+        resource['bestStates'] = resource['bestStates'][:5]
+        resource['biggestValues'] = resource['biggestValues'][:5]
+    return resources
+
+def loadVersionConfigFile(app, pathAppdataVersions):
+    currentVersion = app.comboBoxVersions.get()
+    filePath = os.path.join(pathAppdataVersions, currentVersion, 'config.ini')
+    if not os.path.exists(filePath):
+        for resKey, resource in app.resources.items():
+            if resKey in IGNORED_RESOURCES:
+                continue
+            resource['stringVar'].set("0")
+    else:
+        with open(filePath, "r") as f:
+            line = f.readline()
+            goods = line.split(' ')
+            goods = goods[:len(goods) - 1]
+            for resKey, resource in app.resources.items():
+                if resKey in IGNORED_RESOURCES:
+                    continue
+                resource['stringVar'].set("0")
+                for good in goods:
+                    if good == resKey:
+                        resource['stringVar'].set("1")
+                        break
+    
