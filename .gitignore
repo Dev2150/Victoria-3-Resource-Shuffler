@@ -1,5 +1,3 @@
-*.log.*
-logs/my_app.log
-logs/my_app.log.1
-logs/my_app.log.2
-logs/my_app.log.3
+*.log*
+*.pyc
+
