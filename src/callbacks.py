@@ -20,7 +20,7 @@ def execute(app, versions, pathAppdataVersions, pathGameStateRegions, pathAppdat
             app.resources = getResourcesFromHistory(pathGameHistoryBuildings, app.resources, logger)
             app.resources = getResourcesFromCompanies(stateNameToID, stateIDToName, app.resources, pathGameCompanies, logger)
             trimStateRegions(pathGameStateRegions, logger)
-            shuffleResources(app.resources, logger, stateIDToName)
+            app.resources = shuffleResources(app.resources, logger, stateIDToName)
             restoreStateRegions(pathGameStateRegions, stateInfo, app.resources, logger)
             app.resources = findStatesWithMostResources(app.resources, stateCount)
             switchBestStatesCallback(app, stateIDToName, logger)
