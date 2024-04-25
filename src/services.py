@@ -149,6 +149,11 @@ def trimStateRegions(pathGameStateRegions, logger):
 
 def shuffleResources(resources, logger, stateIDToName):
     # remove guaranteed resources
+
+    print('Constrained' + str(resources['iron']['constrainedHistory']))
+
+    print('Available' + str(resources['iron']['available']))
+
     for resKey, resource in resources.items():
         if resKey in IGNORED_RESOURCES:
             continue
@@ -167,6 +172,8 @@ def shuffleResources(resources, logger, stateIDToName):
                     
                     resource['available'][state] = max(0, resource['available'][state] - protectedAvailability)
 
+    print('Available' + str(resources['iron']['available']))
+
     # shuffle remaining resources
     for resKey, resource in resources.items():
         if resKey in IGNORED_RESOURCES:
@@ -178,6 +185,8 @@ def shuffleResources(resources, logger, stateIDToName):
             shuffle(resource['discoveredInState'])
         if resource['totalUndiscovered'] > 0:
             shuffle(resource['undiscoveredInState'])
+
+    print('Available' + str(resources['iron']['available']))
 
     # restore guaranteed resources
     for resKey, resource in resources.items():
@@ -194,6 +203,8 @@ def shuffleResources(resources, logger, stateIDToName):
                     resource['undiscoveredInState'][state] += protectedAvailability
                 else:
                     resource['available'][state] += protectedAvailability
+
+    print('Available' + str(resources['iron']['available']))
 
 
 	#check

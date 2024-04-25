@@ -107,7 +107,7 @@ def getResourcesFromHistory(pathGameHistoryBuildings, resources, logger):
                 lines = f.readlines()
                 for lineID in range(len(lines)):
                     line = lines[lineID]
-                    found = re.search("(STATE_.*) =.*", line)
+                    found = re.search(r"(STATE_[A-Z_]+)\s*=\s*", line)
                     if found:
                         stateCurrent += 1
                     found = re.search(r'building="([a-z_]+)"', line)
@@ -122,6 +122,8 @@ def getResourcesFromHistory(pathGameHistoryBuildings, resources, logger):
                                     levels = int(found.groups()[0])
                                     resource['constrainedHistory'][stateCurrent] = levels
                                     resource['constrainedHistoryTotal'] += levels
+                                    logger.debug(f'In state #{str(stateCurrent)} it is required {str(levels)} {key} in 1836')
+                                    break
                                 else:
                                     logger.error(f'Expected resource for state #{stateCurrent} for building {resource['building']}')
                                     sys.exit()
