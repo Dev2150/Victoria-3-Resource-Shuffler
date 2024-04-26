@@ -1,6 +1,14 @@
 import os
 
 def configureAppData(logger):
+    """_summary_
+
+    Args:
+        logger (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     pathAppdata = os.path.join(os.getenv('APPDATA'), "Victoria 3 Resource Shuffler")
     pathAppdataVersions = os.path.join(pathAppdata, "versions")
     pathAppdataStateRegionsOriginal = os.path.join(pathAppdataVersions, "original", "state_regions")

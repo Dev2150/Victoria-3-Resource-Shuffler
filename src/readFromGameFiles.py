@@ -5,6 +5,8 @@ from StateResourceExpected import StateResourceExpected
 from globalProperties import logger
 
 def getInfoFromStateRegions(pathGameStateRegions, stateInfo, resources, logger):
+    """Get from the game files the resources for each state
+    This is the most important information from the game, from game/map_data/state_regions"""
     logger.info(f"Reading files from {pathGameStateRegions}")
     resourcesFoundStatic = 0
     resourcesFoundDiscovered = 0
@@ -97,7 +99,10 @@ def getInfoFromStateRegions(pathGameStateRegions, stateInfo, resources, logger):
     logger.info(f"Total lines in original state_regions: {lineCount}")
     return resources, stateInfo
 
-def getResourcesFromHistory(pathGameHistoryBuildings, resources, logger):
+def getGuaranteedResourcesFromHistory(pathGameHistoryBuildings, resources, logger):
+    """Get the number of resources required for each state so that the initial buildings (in 1836) can run
+    The files are got from game/common/history/buildings
+    """
     logger.info(f"Reading files from {pathGameHistoryBuildings}")
     stateCurrent = -1
     for filename in os.listdir(pathGameHistoryBuildings):
@@ -132,7 +137,10 @@ def getResourcesFromHistory(pathGameHistoryBuildings, resources, logger):
         logger.info(f"Initial buildings related to {key}: {resource['constrainedHistoryTotal']}")
     return resources
 
-def getResourcesFromCompanies(stateNameToID, stateIDToName, resources, pathGameCompanies, logger):
+def getGuaranteedResourcesFromCompanies(stateNameToID, stateIDToName, resources, pathGameCompanies, logger):
+    """Get the required number of resources for each state so that the player is able to found companies
+    The files are in game/common/company_types
+    """
     logger.info(f"Reading files from {pathGameCompanies}")
     for filename in os.listdir(pathGameCompanies):
         filePath = os.path.join(pathGameCompanies, filename)

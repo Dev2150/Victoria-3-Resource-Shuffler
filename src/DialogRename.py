@@ -7,6 +7,7 @@ from CTkMessagebox import CTkMessagebox
 from Auxiliary import copyTree
 
 class RenameDialog(ctk.CTkToplevel):
+    """Handles the input and the validation of the new name for the new version"""
     def __init__(self, name, app, pathAppdataVersions, pathGameStateRegions, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.geometry("400x300")
@@ -25,6 +26,7 @@ class RenameDialog(ctk.CTkToplevel):
         self.btnRename.grid(row=2, column=0, padx=(10, 5), pady=10)
 
 def renameCallback(self, app, pathAppdataVersions, pathGameStateRegions):
+    """On button press, perform validation of the new version name"""
     def callback():
         newName = self.entry.get()
         versions = app.comboBoxVersions.cget('values')

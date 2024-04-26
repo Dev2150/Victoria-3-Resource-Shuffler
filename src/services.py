@@ -7,7 +7,9 @@ from typing import List
 from globalProperties import IGNORED_RESOURCES
 from Auxiliary import copyTree
 
-def makeBackUp(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger):
+def backUpStateRegions(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger):
+    """If there is no back-up on %appdata%, create it
+    Otherwise, replace the game's files with the back-up, to start fresh"""
     if not os.path.exists(pathAppdataStateRegionsOriginal):
         os.makedirs(pathAppdataStateRegionsOriginal)
         copyTree(pathGameStateRegions, pathAppdataStateRegionsOriginal)
@@ -16,7 +18,9 @@ def makeBackUp(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger):
         copyTree(pathAppdataStateRegionsOriginal, pathGameStateRegions)
         logger.info("Game's state_region replaced by the back-up from %appdata%")
 
-def configureGamePath(pathGame, pathAppdataStateRegionsOriginal, logger):
+def getGameFilePaths(pathGame, pathAppdataStateRegionsOriginal, logger):
+    """Check if the provided path to the game is correct. 
+    If that's the case, return paths to folders that are worked with by the app, such as the state regions, history buildings, companies and good icons"""
     validPath = True
 
     pathGameStateRegions = os.path.join(pathGame, "game", "map_data", "state_regions")
@@ -39,11 +43,13 @@ def configureGamePath(pathGame, pathAppdataStateRegionsOriginal, logger):
     if not validPath: 
         return validPath, None, None, None, None, None
 
-    makeBackUp(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger)
+    backUpStateRegions(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger)
     
     return validPath, pathGame, pathGameStateRegions, pathGameHistoryBuildings, pathGameCompanies, pathGameGoodIcons
 
-def getStatesInfo(pathGameStateRegions, logger):
+def getStateCountAndNames(pathGameStateRegions, logger):
+    """Get the number & names of states
+    This must be done before running the methods that read from state regions, buildings and history"""
     stateCount = 0
     stateNameToID = {}
     stateIDToName = {}
@@ -67,6 +73,10 @@ def getStatesInfo(pathGameStateRegions, logger):
     return stateCount, stateInfo, stateNameToID, stateIDToName
 
 def getResourcesFromConfig(stateCount, logger):
+    """Extracts from 'resources.ini' the list of: resource name, the corresponding building, the corresponding building group, whether it's dynamic, whether it's hidden at the beggining of the game (& no buildings using it), GUI color
+    
+    It is necessary to perform any reading from game files
+    """
     resources = {}
     countResStatic = 0
     countResDynamic = 0
@@ -118,7 +128,15 @@ def getResourcesFromConfig(stateCount, logger):
 
     return resources
 
-def trimStateRegions(pathGameStateRegions, logger):
+def updateNewStateRegions(pathGameStateRegions, stateInfo, resources, logger, stateIDToName) -> List:
+    """Remove old changes, Shuffle, add new changes"""
+    trimStateRegions(pathGameStateRegions, logger)
+    resources = shuffleResources(resources, logger, stateIDToName)
+    restoreStateRegions(pathGameStateRegions, stateInfo, resources, logger)
+    return resources
+
+def trimStateRegions(pathGameStateRegions, logger) -> None:
+    """So that changes are made in the state_regions, firstly elements will be removed from the files"""
     tempFileLocation = "temp.txt"
     lineCount = 0
     for filename in os.listdir(pathGameStateRegions):
@@ -147,7 +165,10 @@ def trimStateRegions(pathGameStateRegions, logger):
     os.remove(tempFileLocation)
     logger.info(f"Total lines in trimmed state_regions: {lineCount}")
 
-def shuffleResources(resources, logger, stateIDToName):
+def shuffleResources(resources, logger, stateIDToName) -> List:
+    """Shuffles resources - for each resource to be shuffled: it removes from each state the guaranteed amount, shuffles the new list, then it adds the guaranteed amount back
+    
+    Guaranteed amount of resources = Quantity of resources prepared for initial buildings and companies, so that they are useable"""
     # remove guaranteed resources
 
     for resKey, resource in resources.items():
@@ -216,7 +237,8 @@ def shuffleResources(resources, logger, stateIDToName):
                         logger.error(f'Not enough available {str(resKey)} in {stateIDToName[state]}: {str(resource['available'][state])} for initial buildings: {str(constrHistory)} + company: {str(constrCompany)}')
     return resources
 
-def restoreStateRegions(pathGameStateRegions, stateInfo, resources, logger):
+def restoreStateRegions(pathGameStateRegions, stateInfo, resources, logger) -> None:
+    """Add the shuffled amount of resources to the files (state_regions)"""
     tempFileLocation = "temp.txt"
     lineCount = 0
     stateCurrent = -1
@@ -264,6 +286,7 @@ def restoreStateRegions(pathGameStateRegions, stateInfo, resources, logger):
 
 
 def clearCollectedResources(stateCount, resources):
+    """Remove the collected information about resources, such as available, discovered, undiscovered, guaranteed quantity and best states"""
     for resourceName, resource in resources.items():
         resource['available'] = [0] * stateCount
         resource['discoveredInState'] = [0] * stateCount
@@ -279,6 +302,7 @@ def clearCollectedResources(stateCount, resources):
         resource['biggestValues'] = []
 
 def getVersions(pathAppdataVersions, logger) -> List:
+    """Get from %appdata% the list of folders representing the versions, so that it will be loaded into a combobox"""
     versions = []
     if os.path.exists(os.path.join(pathAppdataVersions, "original")):
         versions.append("original")
@@ -291,6 +315,8 @@ def getVersions(pathAppdataVersions, logger) -> List:
     return versions
 
 def findStatesWithMostResources(resources, stateCount) -> List:
+    """Find state with the most resources
+    It is necessary to have run the method 'getInfoFromStateRegions'"""
     for key, resource in resources.items():
         for state in range(stateCount):
             currentSum = resource['available'][state] + resource['discoveredInState'][state] + resource['undiscoveredInState'][state]
@@ -306,6 +332,8 @@ def findStatesWithMostResources(resources, stateCount) -> List:
     return resources
 
 def loadVersionConfigFile(app, pathAppdataVersions):
+    """Gets the list of shuffled resources for the current version
+    The version must be selected from the combobox in the app"""
     currentVersion = app.comboBoxVersions.get()
     filePath = os.path.join(pathAppdataVersions, currentVersion, 'config.ini')
     if not os.path.exists(filePath):

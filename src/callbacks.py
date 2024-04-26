@@ -6,22 +6,22 @@ from globalProperties import IGNORED_RESOURCES, TEXT_DEFAULT_BEST_STATES
 from CTkMessagebox import CTkMessagebox
 import subprocess
 
-from readFromGameFiles import getInfoFromStateRegions, getResourcesFromCompanies, getResourcesFromHistory
-from services import clearCollectedResources, findStatesWithMostResources, getStatesInfo, loadVersionConfigFile, makeBackUp, restoreStateRegions, shuffleResources, trimStateRegions
+from readFromGameFiles import getInfoFromStateRegions, getGuaranteedResourcesFromCompanies, getGuaranteedResourcesFromHistory
+from services import clearCollectedResources, findStatesWithMostResources, getStateCountAndNames, loadVersionConfigFile, backUpStateRegions, updateNewStateRegions
 
-def execute(app, versions, pathAppdataVersions, pathGameStateRegions, pathAppdataStateRegionsOriginal, pathGameHistoryBuildings, pathGameCompanies, logger):
+def performShuffle(app, versions, pathAppdataVersions, pathGameStateRegions, pathAppdataStateRegionsOriginal, pathGameHistoryBuildings, pathGameCompanies, logger):
+    """At the button click, perform the shuffle with the specified set of resources                    
+    """
     def callback():
         if app.top is None or not app.top.winfo_exists():
 
-            makeBackUp(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger)
-            stateCount, stateInfo, stateNameToID, stateIDToName = getStatesInfo(pathGameStateRegions, logger)
+            backUpStateRegions(pathGameStateRegions, pathAppdataStateRegionsOriginal, logger)
+            stateCount, stateInfo, stateNameToID, stateIDToName = getStateCountAndNames(pathGameStateRegions, logger)
             clearCollectedResources(stateCount, app.resources)
             app.resources, stateInfo = getInfoFromStateRegions(pathGameStateRegions, stateInfo, app.resources, logger)
-            app.resources = getResourcesFromHistory(pathGameHistoryBuildings, app.resources, logger)
-            app.resources = getResourcesFromCompanies(stateNameToID, stateIDToName, app.resources, pathGameCompanies, logger)
-            trimStateRegions(pathGameStateRegions, logger)
-            app.resources = shuffleResources(app.resources, logger, stateIDToName)
-            restoreStateRegions(pathGameStateRegions, stateInfo, app.resources, logger)
+            app.resources = getGuaranteedResourcesFromHistory(pathGameHistoryBuildings, app.resources, logger)
+            app.resources = getGuaranteedResourcesFromCompanies(stateNameToID, stateIDToName, app.resources, pathGameCompanies, logger)
+            app.resources = updateNewStateRegions(pathGameStateRegions, stateInfo, app.resources, logger, stateIDToName)
             app.resources = findStatesWithMostResources(app.resources, stateCount)
             switchBestStatesCallback(app, stateIDToName, logger)
 
@@ -34,6 +34,7 @@ def execute(app, versions, pathAppdataVersions, pathGameStateRegions, pathAppdat
     return callback
 
 def switchResourceCallback(resKey, resources, comboBoxPresets, logger):
+    """At the switch click, switch whether the respective resource will be shuffled"""
     def callback():
         value = resources[resKey]['stringVar'].get()
         if value == "1":
@@ -45,6 +46,7 @@ def switchResourceCallback(resKey, resources, comboBoxPresets, logger):
     return callback
 
 def switchResourcePresetCallback(value, resources):
+    """At the selection of a dropdown element, change the set of resources to be shuffled"""
     def callback():
         for resourceName, resource in resources.items():
             if resourceName in IGNORED_RESOURCES:
@@ -64,6 +66,7 @@ def switchResourcePresetCallback(value, resources):
     return callback
 
 def openFolderCallback(app, pathAppdataVersions):
+    """At the button click, open the versions folder"""
     def callback():
         currentVersion = app.comboBoxVersions.get()
         currentPath = os.path.join(pathAppdataVersions, currentVersion)
@@ -71,6 +74,7 @@ def openFolderCallback(app, pathAppdataVersions):
     return callback
 
 def switchVersionCallback(app, pathAppdataVersions, pathGameStateRegions, logger, nothing):
+    """At the combobox element selection, change to another version and load it"""
     def callback():
         currentVersion = app.comboBoxVersions.get()
         currentVersionPath = os.path.join(pathAppdataVersions, currentVersion, 'state_regions')
@@ -84,7 +88,7 @@ def switchVersionCallback(app, pathAppdataVersions, pathGameStateRegions, logger
             logger.info(f"Copied from {currentVersionPath} to {pathGameStateRegions}")
             CTkMessagebox(title="Success", message=f"You are now ready to play with the version '{currentVersion}'!", icon="check", option_1="OK")
 
-            stateCount, stateInfo, stateNameToID, stateIDToName = getStatesInfo(pathGameStateRegions, logger)
+            stateCount, stateInfo, stateNameToID, stateIDToName = getStateCountAndNames(pathGameStateRegions, logger)
             clearCollectedResources(stateCount, app.resources)
             app.resources, stateInfo = getInfoFromStateRegions(pathGameStateRegions, stateInfo, app.resources, logger)
             app.resources = findStatesWithMostResources(app.resources, stateCount)
@@ -95,6 +99,7 @@ def switchVersionCallback(app, pathAppdataVersions, pathGameStateRegions, logger
     return callback
 
 def switchBestStatesCallback(app, stateIDToName, logger):
+    """At the switch click, show or hide the best states for every resource"""
     def callback():
         if app.switchMaxResources.get() == "0":
             for resName, resource in app.resources.items():
